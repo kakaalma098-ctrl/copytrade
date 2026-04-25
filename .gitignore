@@ -6,3 +6,9 @@ data/
 SYSTEM_MAP.md
 xs.txt
 .caliber/
+# Local snapshots / runtime artifacts
+src.backup.*/
+logs/
+*.rar
+log.txt
+*.log

@@ -479,33 +479,42 @@ export class ExecutionEngine {
       return raced;
     }
 
-    // Polling fallback — independent of WSS.
+    // Polling fallback — independent of WSS. TIER 2 #8: race primary +
+    // first-extra RPC per poll cycle. First non-null status wins; all-null
+    // → retry. Bounded fan-out (2 RPCs), tetap responsive saat primary RPC
+    // lambat. Sebelumnya hanya pakai primary → kena slow-RPC tail.
+    const pollConns =
+      this.extraSendConnections.length > 0
+        ? [this.connection, this.extraSendConnections[0]!]
+        : [this.connection];
     while (Date.now() - startedAtMs < deadlineMs) {
       try {
-        const resp = await this.connection.getSignatureStatuses(
-          [payload.signature],
-          { searchTransactionHistory: false },
+        const status = await Promise.any(
+          pollConns.map(async (c) => {
+            const r = await c.getSignatureStatuses([payload.signature], {
+              searchTransactionHistory: false,
+            });
+            const s = r?.value?.[0] ?? null;
+            if (s == null) {
+              throw new Error("status_null");
+            }
+            return s;
+          }),
         );
-        const status = resp?.value?.[0] ?? null;
-        if (status != null) {
-          if (status.err != null) {
-            return { err: status.err };
-          }
-          // confirmations === null means finalized (per web3.js).
-          if (status.confirmations === null) {
-            return { err: null };
-          }
-          if (
-            commitmentLevelMatches(
-              status.confirmationStatus,
-              payload.commitment,
-            )
-          ) {
-            return { err: null };
-          }
+        if (status.err != null) {
+          return { err: status.err };
+        }
+        // confirmations === null means finalized (per web3.js).
+        if (status.confirmations === null) {
+          return { err: null };
+        }
+        if (
+          commitmentLevelMatches(status.confirmationStatus, payload.commitment)
+        ) {
+          return { err: null };
         }
       } catch {
-        // Swallow transient RPC errors; next tick retries.
+        // Semua RPC return null/throw — tx belum visible. Retry next tick.
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
@@ -518,7 +527,7 @@ export class ExecutionEngine {
   private confirmInBackground(payload: ConfirmPayload): void {
     void this.awaitConfirmationWithFallback(payload, {
       subscribeTimeoutMs: 800,
-      deadlineMs: 12_000,
+      deadlineMs: 5_000,
       pollIntervalMs: 30,
     })
       .then((res) => {
@@ -702,7 +711,7 @@ export class ExecutionEngine {
           lastValidBlockHeight: lh,
           commitment,
         },
-        { subscribeTimeoutMs: 800, deadlineMs: 10_000, pollIntervalMs: 30 },
+        { subscribeTimeoutMs: 800, deadlineMs: 5_000, pollIntervalMs: 30 },
       );
       stage.confirmMs = Date.now() - tConfirm;
 
