@@ -1,0 +1,424 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://www.helius.dev/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Entry Monitoring with Yellowstone gRPC
+
+> Monitor low-level Solana blockchain entries, transaction batches, and execution units for deep network analysis.
+
+## Overview
+
+Entry monitoring provides access to the fundamental execution units of the Solana blockchain. Entries contain batches of transactions and their execution results, offering the lowest-level view of blockchain activity.
+
+<Info>
+  **Prerequisites:** This guide assumes you've completed the [Yellowstone gRPC Quickstart](/grpc/quickstart) and have a working stream setup.
+</Info>
+
+<Warning>
+  **Advanced topic:** Entry monitoring is primarily useful for deep blockchain analysis, debugging, and specialized use cases. Most applications should use transaction or account monitoring instead.
+</Warning>
+
+## What are Entries?
+
+<Tabs>
+  <Tab title="Entry Basics">
+    **Fundamental blockchain units**
+
+    Entries are the basic building blocks that validators use to construct blocks:
+
+    * **Transaction batches:** Groups of transactions executed together
+    * **Execution order:** Deterministic transaction ordering within entries
+    * **Hash chains:** Cryptographic linking between entries
+    * **Timing information:** When entries were created and processed
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      entry: {
+        entrySubscribe: {} // Subscribe to all entries
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+  </Tab>
+
+  <Tab title="Entry Structure">
+    **Understanding entry data**
+
+    Each entry contains:
+
+    * **Slot:** Which slot the entry belongs to
+    * **Index:** Position within the slot
+    * **Hash:** Unique entry identifier
+    * **Transactions:** List of transactions in the entry
+    * **Num Hashes:** Proof-of-history hash count
+
+    **Entry vs Transaction monitoring:**
+
+    * Entries show transaction batching and ordering
+    * Useful for understanding validator behavior
+    * Lower level than individual transaction monitoring
+  </Tab>
+
+  <Tab title="Use Cases">
+    **When to use entry monitoring**
+
+    * **Performance analysis:** Understanding transaction batching efficiency
+    * **Validator research:** Studying block construction patterns
+    * **Network debugging:** Investigating consensus issues
+    * **Academic research:** Analyzing blockchain structure
+    * **Forensic analysis:** Detailed transaction ordering investigation
+
+    <Note>
+      **Not recommended for:** Standard application development, user interfaces, or business logic
+    </Note>
+  </Tab>
+</Tabs>
+
+## Implementation Example
+
+### Basic Entry Monitoring
+
+```typescript theme={"system"}
+import { StreamManager } from './stream-manager'; // From quickstart guide
+
+async function monitorEntries() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleEntryUpdate
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    entry: {
+      entrySubscribe: {} // Subscribe to all entries
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  console.log('Starting entry monitoring...');
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleEntryUpdate(data: any): void {
+  if (data.entry) {
+    const entry = data.entry;
+    
+    console.log('\n📋 Entry Details:');
+    console.log(`  Slot: ${entry.slot}`);
+    console.log(`  Index: ${entry.index || 'N/A'}`);
+    console.log(`  Hash: ${entry.hash || 'N/A'}`);
+    console.log(`  Num Hashes: ${entry.numHashes || 'N/A'}`);
+    
+    if (entry.transactions?.length > 0) {
+      console.log(`\n  📦 Entry Transactions (${entry.transactions.length}):`);
+      
+      entry.transactions.forEach((tx: any, index: number) => {
+        console.log(`    ${index + 1}. ${tx.signature || 'No signature'}`);
+        console.log(`       Vote: ${tx.isVote ? 'Yes' : 'No'}`);
+        
+        // Show transaction status if available
+        if (tx.meta) {
+          const status = tx.meta.err ? 'Failed' : 'Success';
+          console.log(`       Status: ${status}`);
+          if (tx.meta.fee) {
+            console.log(`       Fee: ${tx.meta.fee} lamports`);
+          }
+        }
+      });
+    } else {
+      console.log(`  📦 No transactions in this entry`);
+    }
+    
+    // Check if this is a tick entry (no transactions)
+    if (entry.tick !== undefined) {
+      console.log(`  ⏱️  Tick Entry: ${entry.tick ? 'Yes' : 'No'}`);
+    }
+  }
+}
+
+// Start monitoring
+monitorEntries().catch(console.error);
+```
+
+### Entry Analysis Example
+
+Advanced analysis of entry patterns:
+
+```typescript theme={"system"}
+let entryStats = {
+  totalEntries: 0,
+  totalTransactions: 0,
+  tickEntries: 0,
+  largestEntry: 0,
+  slotsProcessed: new Set<number>()
+};
+
+function analyzeEntry(data: any): void {
+  if (data.entry) {
+    const entry = data.entry;
+    entryStats.totalEntries++;
+    entryStats.slotsProcessed.add(entry.slot);
+    
+    const txCount = entry.transactions?.length || 0;
+    entryStats.totalTransactions += txCount;
+    
+    if (txCount === 0 || entry.tick) {
+      entryStats.tickEntries++;
+    }
+    
+    if (txCount > entryStats.largestEntry) {
+      entryStats.largestEntry = txCount;
+      console.log(`\n🔥 New largest entry: ${txCount} transactions in slot ${entry.slot}`);
+    }
+    
+    // Log stats every 100 entries
+    if (entryStats.totalEntries % 100 === 0) {
+      console.log('\n📊 Entry Statistics:');
+      console.log(`  Total Entries: ${entryStats.totalEntries}`);
+      console.log(`  Total Transactions: ${entryStats.totalTransactions}`);
+      console.log(`  Tick Entries: ${entryStats.tickEntries}`);
+      console.log(`  Slots Processed: ${entryStats.slotsProcessed.size}`);
+      console.log(`  Avg Tx/Entry: ${(entryStats.totalTransactions / entryStats.totalEntries).toFixed(2)}`);
+      console.log(`  Largest Entry: ${entryStats.largestEntry} transactions`);
+    }
+  }
+}
+```
+
+## Entry Data Structure
+
+Understanding the entry data format:
+
+<Accordion title="Entry Fields">
+  ```typescript theme={"system"}
+  {
+    slot: number;              // Slot number containing this entry
+    index: number;             // Entry index within the slot
+    hash: string;              // Entry hash (proof-of-history)
+    numHashes: number;         // Number of hashes in PoH sequence
+    transactions: Array<{      // Transactions in this entry
+      signature: string;
+      isVote: boolean;
+      meta: {
+        err: any;            // Error if transaction failed
+        fee: number;         // Transaction fee
+        // ... other transaction metadata
+      };
+    }>;
+    tick: boolean;             // Whether this is a tick entry
+  }
+  ```
+</Accordion>
+
+<Accordion title="Entry vs Other Types">
+  **Entries vs Transactions:**
+
+  * Entries group transactions together
+  * Show execution order and batching
+  * Include PoH (Proof of History) information
+
+  **Entries vs Blocks:**
+
+  * Blocks contain multiple entries
+  * Entries are subunits within blocks
+  * Blocks add consensus and finality information
+
+  **Entries vs Slots:**
+
+  * Slots are time units (400ms)
+  * Multiple entries can exist per slot
+  * Entries show what happened within a slot
+</Accordion>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Volume Characteristics" icon="chart-line">
+    **High-frequency data stream**
+
+    * Very high message rate
+    * Continuous stream during network activity
+    * Each entry contains multiple transactions
+    * Requires efficient processing
+  </Card>
+
+  <Card title="Processing Efficiency" icon="gauge">
+    **Optimize for performance**
+
+    * Process entries asynchronously
+    * Batch entry analysis
+    * Focus on specific data fields
+    * Use sampling for large-scale analysis
+  </Card>
+</CardGroup>
+
+## Common Use Cases
+
+<Tabs>
+  <Tab title="Performance Analysis">
+    **Analyze transaction batching efficiency**
+
+    ```typescript theme={"system"}
+    function analyzeBatching(entry: any): void {
+      const txCount = entry.transactions?.length || 0;
+      
+      if (txCount > 50) {
+        console.log(`Large batch: ${txCount} transactions in entry ${entry.index}`);
+      }
+      
+      // Track batching patterns
+      const batchSizes = new Map<number, number>();
+      const currentCount = batchSizes.get(txCount) || 0;
+      batchSizes.set(txCount, currentCount + 1);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Validator Research">
+    **Study block construction patterns**
+
+    ```typescript theme={"system"}
+    function studyValidatorBehavior(entry: any): void {
+      // Analyze entry timing and structure
+      const hasVoteTransactions = entry.transactions?.some((tx: any) => tx.isVote);
+      const hasRegularTransactions = entry.transactions?.some((tx: any) => !tx.isVote);
+      
+      if (hasVoteTransactions && hasRegularTransactions) {
+        console.log(`Mixed entry: votes and regular transactions in slot ${entry.slot}`);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Network Debugging">
+    **Investigate consensus issues**
+
+    ```typescript theme={"system"}
+    function debugNetworkIssues(entry: any): void {
+      // Look for anomalies in entry structure
+      if (entry.transactions?.length === 0 && !entry.tick) {
+        console.log(`Empty non-tick entry in slot ${entry.slot}`);
+      }
+      
+      // Track entry gaps or irregularities
+      if (entry.numHashes && entry.numHashes > 1000) {
+        console.log(`High hash count: ${entry.numHashes} in slot ${entry.slot}`);
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Filtering and Optimization
+
+Entry monitoring currently doesn't support specific filters, so all entries are streamed. To manage this:
+
+<Note>
+  **Optimization strategies:**
+
+  * **Client-side filtering:** Process only entries matching your criteria
+  * **Sampling:** Analyze every Nth entry for statistical analysis
+  * **Time-based analysis:** Focus on specific time periods
+  * **Slot-based filtering:** Only process entries from certain slots
+  * **Transaction type filtering:** Focus on entries with specific transaction types
+</Note>
+
+Example client-side filtering:
+
+```typescript theme={"system"}
+function handleFilteredEntries(data: any): void {
+  if (data.entry) {
+    const entry = data.entry;
+    
+    // Only process entries with transactions
+    if (entry.transactions?.length > 0) {
+      // Only process entries with non-vote transactions
+      const hasNonVoteTransactions = entry.transactions.some((tx: any) => !tx.isVote);
+      
+      if (hasNonVoteTransactions) {
+        processImportantEntry(entry);
+      }
+    }
+  }
+}
+```
+
+## Best Practices
+
+<Accordion title="When to Use Entry Monitoring">
+  **Appropriate use cases:**
+
+  * Deep blockchain analysis and research
+  * Validator performance studies
+  * Network debugging and forensics
+  * Academic blockchain research
+  * Understanding PoH mechanics
+
+  **When NOT to use:**
+
+  * Standard application development
+  * User-facing features
+  * Business logic implementation
+  * Real-time trading applications
+</Accordion>
+
+<Accordion title="Performance Guidelines">
+  **Handle high-volume data:**
+
+  * Implement efficient data processing
+  * Use asynchronous processing patterns
+  * Consider data sampling for analysis
+  * Monitor memory usage and cleanup
+  * Implement backpressure handling
+</Accordion>
+
+<Accordion title="Analysis Techniques">
+  **Effective entry analysis:**
+
+  * Focus on specific metrics
+  * Use statistical sampling
+  * Implement rolling averages
+  * Track patterns over time
+  * Correlate with other blockchain data
+</Accordion>
+
+## Troubleshooting
+
+<Accordion title="High Data Volume">
+  **Issue:** Overwhelming entry stream volume
+
+  **Solutions:**
+
+  * Implement client-side filtering
+  * Use data sampling techniques
+  * Process entries asynchronously
+  * Monitor system resources
+  * Consider alternative monitoring approaches
+</Accordion>
+
+<Accordion title="Missing Context">
+  **Issue:** Need additional transaction context
+
+  **Solutions:**
+
+  * Combine with transaction monitoring
+  * Cross-reference with account updates
+  * Use block monitoring for broader context
+  * Maintain local state tracking
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Complete Your Learning" icon="graduation-cap" href="/grpc/stream-pump-amm-data">
+    Advanced real-world example: Stream Pump AMM data
+  </Card>
+
+  <Card title="Explore Other Monitoring" icon="receipt" href="/grpc/transaction-monitoring">
+    Go back to transaction monitoring for practical applications
+  </Card>
+</CardGroup>
+
+<Note>
+  **Remember:** Entry monitoring is a specialized tool for advanced blockchain analysis. For most applications, transaction, account, or block monitoring will be more appropriate and efficient.
+</Note>

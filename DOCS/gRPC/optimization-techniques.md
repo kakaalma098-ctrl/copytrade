@@ -1,0 +1,611 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://www.helius.dev/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Solana RPC Optimization: Performance & Cost Best Practices
+
+> Optimize Solana RPC performance, reduce costs, and improve reliability. Transaction optimization, data retrieval patterns, and best practices guide.
+
+Optimizing RPC usage can significantly improve performance, reduce costs, and enhance user experience. This guide covers proven techniques for efficient Solana RPC interactions.
+
+## Quick Start
+
+<CardGroup cols={2}>
+  <Card title="Transaction Optimization" icon="bolt" href="#transaction-optimization">
+    Optimize compute units, priority fees, and transaction sending
+  </Card>
+
+  <Card title="Data Retrieval" icon="database" href="#data-retrieval-optimization">
+    Efficient patterns for fetching account and program data
+  </Card>
+
+  <Card title="Real-time Monitoring" icon="chart-line" href="#real-time-monitoring">
+    WebSocket subscriptions and streaming data optimization
+  </Card>
+
+  <Card title="Best Practices" icon="shield-check" href="#best-practices">
+    Performance guidelines and resource management
+  </Card>
+</CardGroup>
+
+## Transaction Optimization
+
+### Compute Unit Management
+
+**1. Simulate to determine actual usage:**
+
+```typescript theme={"system"}
+const testTransaction = new VersionedTransaction(/* your transaction */);
+const simulation = await connection.simulateTransaction(testTransaction, {
+  replaceRecentBlockhash: true,
+  sigVerify: false
+});
+const unitsConsumed = simulation.value.unitsConsumed;
+```
+
+**2. Set appropriate limits with margin:**
+
+```typescript theme={"system"}
+const computeUnitLimit = Math.ceil(unitsConsumed * 1.1);
+const computeUnitIx = ComputeBudgetProgram.setComputeUnitLimit({ 
+  units: computeUnitLimit 
+});
+instructions.unshift(computeUnitIx); // Add at beginning
+```
+
+### Priority Fee Optimization
+
+**1. Get dynamic fee estimates:**
+
+```typescript theme={"system"}
+const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${API_KEY}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    method: 'getPriorityFeeEstimate',
+    params: [{
+      accountKeys: ['11111111111111111111111111111112'], // System Program
+      options: { recommended: true }
+    }]
+  })
+});
+const { priorityFeeEstimate } = await response.json().result;
+```
+
+**2. Apply the priority fee:**
+
+```typescript theme={"system"}
+const priorityFeeIx = ComputeBudgetProgram.setComputeUnitPrice({ 
+  microLamports: priorityFeeEstimate 
+});
+instructions.unshift(priorityFeeIx);
+```
+
+### Transaction Sending Best Practices
+
+<Tabs>
+  <Tab title="Standard Approach">
+    ```typescript theme={"system"}
+    // Serialize and encode
+    const serializedTx = transaction.serialize();
+    const signature = await connection.sendRawTransaction(serializedTx, {
+      skipPreflight: true, // Saves ~100ms
+      maxRetries: 0 // Handle retries manually
+    });
+    ```
+  </Tab>
+
+  <Tab title="With Confirmation">
+    ```typescript theme={"system"}
+    // Send and confirm with custom logic
+    const signature = await connection.sendRawTransaction(serializedTx);
+
+    // Monitor confirmation
+    const confirmation = await connection.confirmTransaction({
+      signature,
+      blockhash: latestBlockhash.blockhash,
+      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Data Retrieval Optimization
+
+### Enhanced Pagination Methods (V2)
+
+**For large-scale data queries, use the new V2 methods with cursor-based pagination:**
+
+<Card title="⚡ Performance Boost" icon="rocket" color="#E84125">
+  `getProgramAccountsV2` and `getTokenAccountsByOwnerV2` provide significant performance improvements for applications dealing with large datasets:
+
+  * **Configurable limits**: 1-10,000 accounts per request
+  * **Cursor-based pagination**: Prevents timeouts on large queries
+  * **Incremental updates**: Use `changedSinceSlot` for real-time synchronization
+  * **Better memory usage**: Stream data instead of loading everything at once
+</Card>
+
+**Example: Efficient program account querying**
+
+```typescript theme={"system"}
+// ❌ Old approach - could timeout with large datasets
+const allAccounts = await connection.getProgramAccounts(programId, {
+  encoding: 'base64',
+  filters: [{ dataSize: 165 }]
+});
+
+// ✅ New approach - paginated with better performance
+let allAccounts = [];
+let paginationKey = null;
+
+do {
+  const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: '1',
+      method: 'getProgramAccountsV2',
+      params: [
+        programId,
+        {
+          encoding: 'base64',
+          filters: [{ dataSize: 165 }],
+          limit: 5000,
+          ...(paginationKey && { paginationKey })
+        }
+      ]
+    })
+  });
+  
+  const data = await response.json();
+  allAccounts.push(...data.result.accounts);
+  paginationKey = data.result.paginationKey;
+} while (paginationKey);
+```
+
+**Incremental updates for real-time applications:**
+
+```typescript theme={"system"}
+// Get only accounts modified since a specific slot
+const incrementalUpdate = await fetch(`https://mainnet.helius-rpc.com/?api-key=${API_KEY}`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    jsonrpc: '2.0',
+    id: '1',
+    method: 'getProgramAccountsV2',
+    params: [
+      programId,
+      {
+        encoding: 'jsonParsed',
+        limit: 1000,
+        changedSinceSlot: lastProcessedSlot // Only get recent changes
+      }
+    ]
+  })
+});
+```
+
+## Data Retrieval Optimization
+
+### Efficient Account Queries
+
+<Tabs>
+  <Tab title="Single Account">
+    ```typescript theme={"system"}
+    // Use dataSlice to reduce payload size
+    const accountInfo = await connection.getAccountInfo(pubkey, {
+      encoding: 'base64',
+      dataSlice: { offset: 0, length: 100 }, // Only get needed data
+      commitment: 'confirmed'
+    });
+    ```
+  </Tab>
+
+  <Tab title="Multiple Accounts">
+    ```typescript theme={"system"}
+    // Batch multiple account queries
+    const accounts = await connection.getMultipleAccountsInfo([
+      pubkey1, pubkey2, pubkey3
+    ], {
+      encoding: 'base64',
+      commitment: 'confirmed'
+    });
+    ```
+  </Tab>
+
+  <Tab title="Program Accounts">
+    ```typescript theme={"system"}
+    // Use filters to reduce data transfer
+    const accounts = await connection.getProgramAccounts(programId, {
+      filters: [
+        { dataSize: 165 }, // Token account size
+        { memcmp: { offset: 0, bytes: mintAddress }}
+      ],
+      encoding: 'jsonParsed'
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Token Balance Lookups
+
+<CodeGroup>
+  ```typescript ❌ Inefficient theme={"system"}
+  // Don't do this - requires N+1 RPC calls
+  const tokenAccounts = await connection.getTokenAccountsByOwner(owner, {
+    programId: TOKEN_PROGRAM_ID
+  });
+  const balances = await Promise.all(
+    tokenAccounts.value.map(acc => 
+      connection.getTokenAccountBalance(acc.pubkey)
+    )
+  );
+  // ~500ms + (100ms * N accounts)
+  ```
+
+  ```typescript ✅ Optimized theme={"system"}
+  // Single call with parsed data
+  const tokenAccounts = await connection.getTokenAccountsByOwner(owner, {
+    programId: TOKEN_PROGRAM_ID
+  }, { encoding: 'jsonParsed' });
+
+  const balances = tokenAccounts.value.map(acc => ({
+    mint: acc.account.data.parsed.info.mint,
+    amount: acc.account.data.parsed.info.tokenAmount.uiAmount
+  }));
+  // ~500ms total - 95% reduction for large wallets
+  ```
+</CodeGroup>
+
+### Transaction History
+
+<CodeGroup>
+  ```typescript ❌ Inefficient theme={"system"}
+  // Avoid sequential transaction fetching
+  const signatures = await connection.getSignaturesForAddress(address, { limit: 100 });
+  const transactions = await Promise.all(
+    signatures.map(sig => connection.getTransaction(sig.signature))
+  );
+  // ~1s + (200ms * 100 txs) = ~21s
+  // Also note: getSignaturesForAddress doesn't include token account transactions
+  ```
+
+  ```typescript ✅ Fast (Helius Exclusive) theme={"system"}
+  // Use getTransactionsForAddress for full history including token accounts
+  const response = await fetch(`https://mainnet.helius-rpc.com/?api-key=${API_KEY}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getTransactionsForAddress',
+      params: [
+        address,
+        {
+          transactionDetails: 'full',
+          limit: 100,
+          filters: { tokenAccounts: 'balanceChanged' }
+        }
+      ]
+    })
+  });
+  // ~100ms total - includes complete token history in one call
+  ```
+</CodeGroup>
+
+## Real-time Monitoring
+
+### Account Subscriptions
+
+<CodeGroup>
+  ```typescript ❌ Polling theme={"system"}
+  // Avoid polling - wastes resources
+  setInterval(async () => {
+    const accountInfo = await connection.getAccountInfo(pubkey);
+    // Process updates...
+  }, 1000);
+  ```
+
+  ```typescript ✅ WebSocket theme={"system"}
+  // Use WebSocket subscriptions for real-time updates
+  const subscriptionId = connection.onAccountChange(
+    pubkey,
+    (accountInfo, context) => {
+      // Handle real-time updates
+      console.log('Account updated:', accountInfo);
+    },
+    'confirmed',
+    { encoding: 'base64', dataSlice: { offset: 0, length: 100 }}
+  );
+  ```
+</CodeGroup>
+
+### Program Account Monitoring
+
+```typescript theme={"system"}
+// Monitor specific program accounts with filters
+connection.onProgramAccountChange(
+  programId,
+  (accountInfo, context) => {
+    // Handle program account changes
+  },
+  'confirmed',
+  {
+    filters: [
+      { dataSize: 1024 },
+      { memcmp: { offset: 0, bytes: ACCOUNT_DISCRIMINATOR }}
+    ],
+    encoding: 'base64'
+  }
+);
+```
+
+### Transaction Monitoring
+
+```typescript theme={"system"}
+// Subscribe to transaction logs for real-time monitoring
+const ws = new WebSocket(`wss://mainnet.helius-rpc.com/?api-key=${API_KEY}`);
+
+ws.on('open', () => {
+  ws.send(JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    method: 'logsSubscribe',
+    params: [
+      { mentions: [programId] },
+      { commitment: 'confirmed' }
+    ]
+  }));
+});
+
+ws.on('message', (data) => {
+  const message = JSON.parse(data);
+  if (message.params) {
+    const signature = message.params.result.value.signature;
+    // Process transaction signature
+  }
+});
+```
+
+## Advanced Patterns
+
+### Smart Retry Logic
+
+```typescript theme={"system"}
+class RetryManager {
+  private backoff = new ExponentialBackoff({
+    min: 100,
+    max: 5000,
+    factor: 2,
+    jitter: 0.2
+  });
+
+  async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        if (error.message.includes('429')) {
+          // Rate limit - wait and retry
+          await this.backoff.delay();
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+}
+```
+
+### Memory-Efficient Processing
+
+```typescript theme={"system"}
+// Process large datasets in chunks
+function chunk<T>(array: T[], size: number): T[][] {
+  return Array.from({ length: Math.ceil(array.length / size) }, (_, i) =>
+    array.slice(i * size, i * size + size)
+  );
+}
+
+// Process program accounts in batches
+const allAccounts = await connection.getProgramAccounts(programId, {
+  dataSlice: { offset: 0, length: 32 }
+});
+
+const chunks = chunk(allAccounts, 100);
+for (const batch of chunks) {
+  const detailedAccounts = await connection.getMultipleAccountsInfo(
+    batch.map(acc => acc.pubkey)
+  );
+  // Process batch...
+}
+```
+
+### Connection Pooling
+
+```typescript theme={"system"}
+class ConnectionPool {
+  private connections: Connection[] = [];
+  private currentIndex = 0;
+
+  constructor(rpcUrls: string[]) {
+    this.connections = rpcUrls.map(url => new Connection(url));
+  }
+
+  getConnection(): Connection {
+    const connection = this.connections[this.currentIndex];
+    this.currentIndex = (this.currentIndex + 1) % this.connections.length;
+    return connection;
+  }
+}
+
+const pool = new ConnectionPool([
+  'https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY',
+  'https://mainnet-backup.helius-rpc.com/?api-key=YOUR_API_KEY'
+]);
+```
+
+## Performance Monitoring
+
+### Track RPC Usage
+
+```typescript theme={"system"}
+class RPCMonitor {
+  private metrics = {
+    calls: 0,
+    errors: 0,
+    totalLatency: 0
+  };
+
+  async monitoredCall<T>(operation: () => Promise<T>): Promise<T> {
+    const start = Date.now();
+    this.metrics.calls++;
+    
+    try {
+      const result = await operation();
+      this.metrics.totalLatency += Date.now() - start;
+      return result;
+    } catch (error) {
+      this.metrics.errors++;
+      throw error;
+    }
+  }
+
+  getStats() {
+    return {
+      ...this.metrics,
+      averageLatency: this.metrics.totalLatency / this.metrics.calls,
+      errorRate: this.metrics.errors / this.metrics.calls
+    };
+  }
+}
+```
+
+## Best Practices
+
+### Commitment Levels
+
+<Tabs>
+  <Tab title="processed">
+    * **Use for**: WebSocket subscriptions, real-time updates
+    * **Latency**: \~400ms
+    * **Reliability**: Good for most applications
+  </Tab>
+
+  <Tab title="confirmed">
+    * **Use for**: General queries, account info
+    * **Latency**: \~1s
+    * **Reliability**: Recommended for most use cases
+  </Tab>
+
+  <Tab title="finalized">
+    * **Use for**: Final settlement, irreversible operations
+    * **Latency**: \~32s
+    * **Reliability**: Maximum certainty
+  </Tab>
+</Tabs>
+
+### Resource Management
+
+<CheckboxList>
+  * Use `dataSlice` to limit payload sizes
+  * Implement server-side filtering with `memcmp` and `dataSize`
+  * Batch operations to reduce round trips
+  * Cache results to avoid redundant calls
+  * Close WebSocket subscriptions when done
+  * Implement circuit breakers for error handling
+</CheckboxList>
+
+### Error Handling
+
+```typescript theme={"system"}
+// Implement robust error handling
+async function robustRPCCall<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error.code === -32602) {
+      // Invalid params - fix request
+      throw new Error('Invalid RPC parameters');
+    } else if (error.code === -32005) {
+      // Node behind - retry with different node
+      throw new Error('Node synchronization issue');
+    } else if (error.message.includes('429')) {
+      // Rate limit - implement backoff
+      throw new Error('Rate limited');
+    }
+    throw error;
+  }
+}
+```
+
+## Common Pitfalls to Avoid
+
+<Warning>
+  **Avoid these common mistakes:**
+
+  * Polling instead of using WebSocket subscriptions
+  * Fetching full account data when only partial data is needed
+  * Not using batch operations for multiple queries
+  * Ignoring rate limits and not implementing proper retry logic
+  * Using `finalized` commitment when `confirmed` is sufficient
+  * Not closing subscriptions, leading to memory leaks
+</Warning>
+
+## Related Methods
+
+The optimization techniques in this guide reference the following WebSocket and RPC methods:
+
+<CardGroup cols={2}>
+  <Card title="getSignaturesForAddress" href="/api-reference/rpc/http/getsignaturesforaddress">
+    Get transaction signatures for an address
+  </Card>
+
+  <Card title="getTransaction" href="/api-reference/rpc/http/gettransaction">
+    Retrieve full transaction details by signature
+  </Card>
+
+  <Card title="getProgramAccounts" href="/api-reference/rpc/http/getprogramaccounts">
+    Fetch all accounts owned by a program
+  </Card>
+
+  <Card title="getTokenAccountsByOwner" href="/api-reference/rpc/http/gettokenaccountsbyowner">
+    Get token accounts for a wallet
+  </Card>
+
+  <Card title="getMultipleAccountsInfo" href="/api-reference/rpc/http/getmultipleaccounts">
+    Batch fetch multiple account details
+  </Card>
+
+  <Card title="getAccountInfo" href="/api-reference/rpc/http/getaccountinfo">
+    Get information about a single account
+  </Card>
+
+  <Card title="accountSubscribe" href="/api-reference/rpc/websocket/accountsubscribe">
+    Subscribe to account changes via WebSocket
+  </Card>
+
+  <Card title="programSubscribe" href="/api-reference/rpc/websocket/programsubscribe">
+    Subscribe to program account changes via WebSocket
+  </Card>
+
+  <Card title="logsSubscribe" href="/api-reference/rpc/websocket/logssubscribe">
+    Subscribe to transaction logs via WebSocket
+  </Card>
+</CardGroup>
+
+## Summary
+
+By implementing these optimization techniques, you can achieve:
+
+* **60-90% reduction** in API call volume
+* **Significantly lower latency** for real-time operations
+* **Reduced bandwidth usage** through targeted queries
+* **Better error resilience** with smart retry logic
+* **Lower operational costs** through efficient resource usage
+
+<Card title="Next Steps" icon="arrow-right">
+  Ready to implement these optimizations? Check out our [Transaction Optimization Guide](/sending-transactions/optimizing-transactions) for transaction-specific best practices.
+</Card>

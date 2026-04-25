@@ -1,0 +1,454 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://www.helius.dev/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Transaction Monitoring with Yellowstone gRPC
+
+> Stream Solana transactions in real-time with program filtering, execution details, and token balance change tracking.
+
+## Overview
+
+Transaction monitoring enables you to track transaction execution, success/failure status, program interactions, and token balance changes across Solana in real-time. This guide covers filtering strategies and practical implementations for different transaction monitoring use cases.
+
+<Info>
+  **Prerequisites:** This guide assumes you've completed the [Yellowstone gRPC Quickstart](/grpc/quickstart) and have a working stream setup.
+</Info>
+
+## Transaction Filtering Options
+
+<Tabs>
+  <Tab title="Program Filtering">
+    **Monitor transactions involving specific programs**
+
+    Track all transactions that interact with your programs:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      transactions: {
+        client: {
+          accountInclude: [
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+            "11111111111111111111111111111111",              // System Program
+            "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8"  // Your program
+          ],
+          accountExclude: [],
+          accountRequired: [],
+          vote: false,
+          failed: false
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Note>
+      **Best for:** Program-specific monitoring, DeFi protocol tracking, smart contract interactions
+    </Note>
+  </Tab>
+
+  <Tab title="Account-Specific">
+    **Monitor transactions affecting specific accounts**
+
+    Track transactions that modify specific accounts:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      transactions: {
+        client: {
+          accountInclude: [
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC mint
+            "YourWalletAddress"                                // Your wallet
+          ],
+          vote: false,
+          failed: true // Include failures to track errors
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Tip>
+      **Use case:** Wallet monitoring, token mint tracking, specific account activity
+    </Tip>
+  </Tab>
+
+  <Tab title="Advanced Filtering">
+    **Combine multiple filter criteria**
+
+    Use required accounts and exclusions for precise filtering:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      transactions: {
+        client: {
+          accountInclude: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+          accountRequired: ["YourProgramId"], // Must include this program
+          accountExclude: ["VoteProgram"],     // Exclude vote-related txs
+          vote: false,
+          failed: false
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Warning>
+      **Filter logic:** accountInclude (OR) AND accountRequired (AND) AND NOT accountExclude
+    </Warning>
+  </Tab>
+</Tabs>
+
+## Practical Examples
+
+### Example 1: Monitor DEX Transactions
+
+Track all transactions involving popular DEX programs:
+
+```typescript theme={"system"}
+import { StreamManager } from './stream-manager'; // From quickstart guide
+
+async function monitorDEXTransactions() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleDEXTransaction
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    transactions: {
+      client: {
+        accountInclude: [
+          "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", // Raydium V4
+          "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8", // Raydium V5
+          "CAMMCzo5YL8w4VFF8KVHrK22GGUQpMpTFb6xRmpLFGNnSm", // Raydium CLMM
+          "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"   // Jupiter
+        ],
+        vote: false,
+        failed: false
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleDEXTransaction(data: any): void {
+  if (data.transaction?.transaction) {
+    const tx = data.transaction.transaction;
+    console.log(`\n🔄 DEX Transaction:`);
+    console.log(`  Signature: ${tx.signature}`);
+    console.log(`  Slot: ${data.transaction.slot}`);
+    console.log(`  Status: ${tx.meta?.err ? 'Failed' : 'Success'}`);
+    console.log(`  Fee: ${tx.meta?.fee || 0} lamports`);
+    console.log(`  Compute Units: ${tx.meta?.computeUnitsConsumed || 0}`);
+    
+    // Show token balance changes
+    if (tx.meta?.preTokenBalances?.length > 0) {
+      console.log(`  Token Balance Changes:`);
+      tx.meta.preTokenBalances.forEach((preBalance: any, index: number) => {
+        const postBalance = tx.meta.postTokenBalances[index];
+        if (preBalance && postBalance) {
+          const change = postBalance.uiTokenAmount.uiAmount - preBalance.uiTokenAmount.uiAmount;
+          if (change !== 0) {
+            console.log(`    ${preBalance.mint}: ${change > 0 ? '+' : ''}${change}`);
+          }
+        }
+      });
+    }
+  }
+}
+```
+
+### Example 2: Monitor Failed Transactions
+
+Track failed transactions to identify issues:
+
+```typescript theme={"system"}
+async function monitorFailedTransactions() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleFailedTransaction
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    transactions: {
+      client: {
+        accountInclude: ["YourProgramId"], // Your program
+        vote: false,
+        failed: true // Only failed transactions
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleFailedTransaction(data: any): void {
+  if (data.transaction?.transaction?.meta?.err) {
+    const tx = data.transaction.transaction;
+    console.log(`\n❌ Failed Transaction:`);
+    console.log(`  Signature: ${tx.signature}`);
+    console.log(`  Slot: ${data.transaction.slot}`);
+    console.log(`  Error: ${JSON.stringify(tx.meta.err)}`);
+    console.log(`  Fee: ${tx.meta.fee} lamports`);
+    console.log(`  Compute Units: ${tx.meta.computeUnitsConsumed || 0}`);
+    
+    // Log instruction details for debugging
+    if (tx.transaction?.message?.instructions) {
+      console.log(`  Instructions:`);
+      tx.transaction.message.instructions.forEach((inst: any, i: number) => {
+        console.log(`    ${i}: Program ${inst.programIdIndex}, Data: ${inst.data}`);
+      });
+    }
+  }
+}
+```
+
+### Example 3: Monitor High-Value Transactions
+
+Track transactions with significant SOL transfers:
+
+```typescript theme={"system"}
+async function monitorHighValueTransactions() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleHighValueTransaction
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    transactions: {
+      client: {
+        accountInclude: ["11111111111111111111111111111111"], // System Program
+        vote: false,
+        failed: false
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleHighValueTransaction(data: any): void {
+  if (data.transaction?.transaction?.meta) {
+    const tx = data.transaction.transaction;
+    const preBalances = tx.meta.preBalances || [];
+    const postBalances = tx.meta.postBalances || [];
+    
+    // Calculate largest balance change
+    let maxChange = 0;
+    preBalances.forEach((preBalance: number, index: number) => {
+      const postBalance = postBalances[index] || 0;
+      const change = Math.abs(postBalance - preBalance);
+      maxChange = Math.max(maxChange, change);
+    });
+    
+    // Only log transactions with > 10 SOL moved
+    const changeInSOL = maxChange / 1e9;
+    if (changeInSOL > 10) {
+      console.log(`\n💰 High-Value Transaction:`);
+      console.log(`  Signature: ${tx.signature}`);
+      console.log(`  Slot: ${data.transaction.slot}`);
+      console.log(`  Max SOL Transfer: ${changeInSOL.toFixed(2)} SOL`);
+      console.log(`  Fee: ${tx.meta.fee / 1e9} SOL`);
+      console.log(`  Accounts: ${tx.transaction?.message?.accountKeys?.length || 0}`);
+    }
+  }
+}
+```
+
+## Transaction Data Structure
+
+Understanding the transaction data structure helps extract relevant information:
+
+<Accordion title="Transaction Message Structure">
+  **Core transaction data:**
+
+  ```typescript theme={"system"}
+  {
+    signature: string;
+    isVote: boolean;
+    transaction: {
+      message: {
+        accountKeys: string[];        // All accounts involved
+        instructions: Instruction[];  // Program instructions
+        recentBlockhash: string;     // Recent blockhash used
+      };
+      signatures: string[];          // Transaction signatures
+    };
+    meta: {
+      err: any;                      // Error details if failed
+      fee: number;                   // Transaction fee in lamports
+      computeUnitsConsumed: number;  // Compute units used
+      preBalances: number[];         // Account balances before
+      postBalances: number[];        // Account balances after
+      preTokenBalances: TokenBalance[];
+      postTokenBalances: TokenBalance[];
+      logMessages: string[];         // Program log messages
+    };
+  }
+  ```
+</Accordion>
+
+<Accordion title="Token Balance Changes">
+  **Token balance structure:**
+
+  ```typescript theme={"system"}
+  {
+    accountIndex: number;
+    mint: string;                   // Token mint address
+    owner: string;                  // Account owner
+    uiTokenAmount: {
+      amount: string;               // Raw token amount
+      decimals: number;             // Token decimals
+      uiAmount: number;             // Human-readable amount
+      uiAmountString: string;       // String representation
+    };
+  }
+  ```
+</Accordion>
+
+<Accordion title="Instruction Details">
+  **Program instruction structure:**
+
+  ```typescript theme={"system"}
+  {
+    programIdIndex: number;         // Index in accountKeys array
+    accounts: number[];             // Account indices involved
+    data: string;                   // Instruction data (base58)
+  }
+  ```
+</Accordion>
+
+## Filter Logic Reference
+
+<CardGroup cols={2}>
+  <Card title="Include Logic (OR)" icon="plus">
+    **accountInclude:** Transaction must involve ANY of these accounts
+
+    **Example:** `["A", "B"]` matches transactions involving account A OR account B
+  </Card>
+
+  <Card title="Required Logic (AND)" icon="check">
+    **accountRequired:** Transaction must involve ALL of these accounts
+
+    **Example:** `["A", "B"]` matches transactions involving account A AND account B
+  </Card>
+
+  <Card title="Exclude Logic (NOT)" icon="minus">
+    **accountExclude:** Transaction must NOT involve any of these accounts
+
+    **Example:** `["A", "B"]` excludes transactions involving account A or account B
+  </Card>
+
+  <Card title="Combined Logic" icon="code">
+    **Final filter:** `(accountInclude OR empty) AND (accountRequired AND all) AND NOT (accountExclude OR any)`
+  </Card>
+</CardGroup>
+
+## Performance Considerations
+
+<Tabs>
+  <Tab title="Volume Management">
+    **Transaction streams can be high-volume**
+
+    * Start with specific program filters
+    * Use commitment levels appropriately
+    * Monitor your processing capacity
+    * Implement backpressure handling
+
+    ```typescript theme={"system"}
+    // Rate limiting example
+    let transactionCount = 0;
+    const startTime = Date.now();
+
+    function handleTransaction(data: any): void {
+      transactionCount++;
+      
+      if (transactionCount % 100 === 0) {
+        const elapsed = (Date.now() - startTime) / 1000;
+        const rate = transactionCount / elapsed;
+        console.log(`Processing ${rate.toFixed(1)} tx/sec`);
+      }
+      
+      // Your transaction processing logic
+    }
+    ```
+  </Tab>
+
+  <Tab title="Data Processing">
+    **Optimize data extraction**
+
+    * Process data asynchronously
+    * Extract only needed fields
+    * Use efficient data structures
+    * Consider batching updates
+
+    ```typescript theme={"system"}
+    // Efficient data extraction
+    function extractTransactionData(tx: any) {
+      return {
+        signature: tx.signature,
+        slot: tx.slot,
+        success: !tx.meta?.err,
+        fee: tx.meta?.fee || 0,
+        computeUnits: tx.meta?.computeUnitsConsumed || 0,
+        tokenChanges: extractTokenChanges(tx.meta)
+      };
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+Common transaction monitoring errors and solutions:
+
+<Accordion title="Too Many Transactions">
+  **Error:** Overwhelming transaction volume
+
+  **Solutions:**
+
+  * Add more specific filters (accountRequired, accountExclude)
+  * Use higher commitment levels to reduce volume
+  * Implement sampling or rate limiting
+  * Process transactions asynchronously
+</Accordion>
+
+<Accordion title="Missing Transactions">
+  **Error:** Expected transactions not appearing
+
+  **Solutions:**
+
+  * Verify program addresses are correct
+  * Check if transactions actually occur
+  * Try PROCESSED commitment for faster updates
+  * Ensure filters aren't too restrictive
+</Accordion>
+
+<Accordion title="Parse Errors">
+  **Error:** Cannot parse transaction data
+
+  **Solutions:**
+
+  * Handle missing fields gracefully
+  * Validate data structure before processing
+  * Log problematic transactions for debugging
+  * Use try-catch blocks around parsing logic
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Slot & Block Monitoring" icon="cube" href="/grpc/slot-and-block-monitoring">
+    Learn to monitor network consensus and block production
+  </Card>
+
+  <Card title="Advanced Patterns" icon="chart-line" href="/grpc/stream-pump-amm-data">
+    Real-world example: monitoring Pump AMM data
+  </Card>
+</CardGroup>

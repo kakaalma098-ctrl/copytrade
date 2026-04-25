@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Copytrading · control center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'system-ui', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-950 font-sans text-slate-100 antialiased">
+    <!-- Ambient gradient backdrop -->
+    <div class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      <div class="absolute left-1/2 top-0 h-[32rem] w-[64rem] -translate-x-1/2 rounded-full bg-emerald-500/5 blur-[120px]"></div>
+      <div class="absolute bottom-0 right-0 h-[24rem] w-[32rem] rounded-full bg-indigo-500/5 blur-[120px]"></div>
+    </div>
+
+    <!-- Mobile menu button -->
+    <button
+      id="btn-menu"
+      class="fixed left-4 top-4 z-40 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/80 backdrop-blur md:hidden"
+      aria-label="Menu"
+    >
+      <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
+    </button>
+
+    <!-- Sidebar -->
+    <aside
+      id="sidebar"
+      class="fixed inset-y-0 left-0 z-30 flex w-64 -translate-x-full flex-col border-r border-slate-800/70 bg-slate-950/90 backdrop-blur-xl transition-transform duration-200 md:translate-x-0"
+    >
+      <div class="flex items-center gap-3 px-6 py-5">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-teal-600 shadow-lg shadow-emerald-500/20">
+          <svg class="h-5 w-5 text-slate-950" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h7l-1 8 11-12h-7l0-8z"/></svg>
+        </div>
+        <div>
+          <div class="text-sm font-semibold tracking-tight">Copytrading</div>
+          <div class="text-xs text-slate-500">control center</div>
+        </div>
+      </div>
+
+      <nav class="flex-1 space-y-0.5 px-3 py-2">
+        <button data-nav="overview" class="nav-item nav-active">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          <span>Overview</span>
+        </button>
+        <button data-nav="positions" class="nav-item">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6V5a2 2 0 012-2h0a2 2 0 012 2v1m5 0H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2zM3 12h18"/></svg>
+          <span>Positions</span>
+          <span id="nav-pos-count" class="nav-badge">0</span>
+        </button>
+        <button data-nav="whales" class="nav-item">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 014-4h4a4 4 0 014 4v2h-1m-7-6a4 4 0 100-8 4 4 0 000 8zm10-4a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span>Whales</span>
+          <span id="nav-whale-count" class="nav-badge">0</span>
+        </button>
+        <button data-nav="settings" class="nav-item">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.3 3.6a2 2 0 013.4 0l.6 1a2 2 0 001.7 1l1.1 0a2 2 0 011.7 2.9l-.5 1a2 2 0 000 2l.5 1a2 2 0 01-1.7 2.9h-1.1a2 2 0 00-1.7 1l-.6 1a2 2 0 01-3.4 0l-.6-1a2 2 0 00-1.7-1H6a2 2 0 01-1.7-2.9l.5-1a2 2 0 000-2l-.5-1A2 2 0 016 6.5h1a2 2 0 001.7-1l.6-1z"/><circle cx="12" cy="12" r="3"/></svg>
+          <span>Settings</span>
+        </button>
+        <button data-nav="history" class="nav-item">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>History</span>
+        </button>
+      </nav>
+
+      <div class="border-t border-slate-800/70 p-4">
+        <div class="flex items-center gap-2 text-xs">
+          <span id="conn-dot" class="relative flex h-2 w-2">
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+          </span>
+          <span id="conn-text" class="text-slate-400">connected</span>
+        </div>
+        <div id="conn-uptime" class="mt-1 font-mono text-[10px] text-slate-600">uptime —</div>
+      </div>
+    </aside>
+
+    <!-- Overlay for mobile sidebar -->
+    <div id="sidebar-overlay" class="fixed inset-0 z-20 hidden bg-slate-950/60 backdrop-blur-sm md:hidden"></div>
+
+    <!-- Main -->
+    <main class="min-h-screen md:pl-64">
+      <!-- Top bar -->
+      <header class="sticky top-0 z-10 border-b border-slate-800/70 bg-slate-950/80 backdrop-blur-xl">
+        <div class="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
+          <div class="flex items-center gap-3 pl-12 md:pl-0">
+            <h1 id="page-title" class="text-lg font-semibold tracking-tight">Overview</h1>
+            <span
+              id="paused-badge"
+              class="hidden items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-300"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-amber-400"></span>
+              PAUSED
+            </span>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              id="btn-pause"
+              class="group inline-flex h-9 items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>
+              Pause
+            </button>
+            <button
+              id="btn-resume"
+              class="hidden inline-flex h-9 items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/20"
+            >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8L6 20V4z"/></svg>
+              Resume
+            </button>
+            <button
+              id="btn-refresh"
+              class="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 text-sm text-slate-300 transition hover:border-slate-700 hover:bg-slate-900"
+              aria-label="Refresh"
+            >
+              <svg id="refresh-icon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.6A8 8 0 0119.7 9M20 20v-5h-.6a8 8 0 01-15.1 0"/></svg>
+              <span class="hidden sm:inline">Refresh</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+
+      <!-- OVERVIEW -->
+      <section data-panel="overview" class="panel">
+        <!-- Hero stats -->
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <!-- Baseline -->
+          <div class="glass-card group">
+            <div class="flex items-center justify-between">
+              <div class="stat-label">Baseline SOL</div>
+              <div class="h-8 w-8 rounded-lg bg-slate-800/50 p-1.5 text-slate-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+            </div>
+            <div id="m-baseline" class="stat-value">—</div>
+            <div id="m-baseline-ts" class="stat-foot">—</div>
+          </div>
+
+          <!-- Latest -->
+          <div class="glass-card group">
+            <div class="flex items-center justify-between">
+              <div class="stat-label">Current SOL</div>
+              <button
+                id="btn-refresh-balance"
+                class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/50 text-slate-400 transition hover:bg-emerald-500/20 hover:text-emerald-400"
+                title="fetch now"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.6A8 8 0 0119.7 9M20 20v-5h-.6a8 8 0 01-15.1 0"/></svg>
+              </button>
+            </div>
+            <div id="m-latest" class="stat-value">—</div>
+            <div id="m-latest-ts" class="stat-foot">—</div>
+          </div>
+
+          <!-- P&L -->
+          <div class="glass-card relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <div class="stat-label">Profit &amp; Loss</div>
+              <button
+                id="btn-recapture-baseline"
+                class="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/50 text-slate-400 transition hover:bg-amber-500/20 hover:text-amber-400"
+                title="Recapture baseline from current SOL balance"
+              >
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </button>
+            </div>
+            <div id="m-pnl" class="stat-value">—</div>
+            <div id="m-pnl-pct" class="stat-foot">—</div>
+            <div class="mt-2 flex items-center gap-2 text-xs">
+              <span class="text-slate-500">trade flow:</span>
+              <span id="m-netflow" class="font-mono font-medium">—</span>
+            </div>
+            <div id="pnl-bar" class="absolute bottom-0 left-0 h-0.5 w-0 bg-gradient-to-r from-emerald-500 to-teal-400 transition-all"></div>
+          </div>
+
+          <!-- Uptime -->
+          <div class="glass-card">
+            <div class="flex items-center justify-between">
+              <div class="stat-label">Uptime</div>
+              <div class="h-8 w-8 rounded-lg bg-slate-800/50 p-1.5 text-slate-400">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              </div>
+            </div>
+            <div id="m-uptime" class="stat-value">—</div>
+            <div id="m-uptime-sub" class="stat-foot">process lifetime</div>
+          </div>
+        </div>
+
+        <!-- Activity + Performance -->
+        <div class="mt-6 grid gap-4 lg:grid-cols-3">
+          <div class="glass-card lg:col-span-2">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-sm font-semibold">Trading Activity</h3>
+              <span class="text-xs text-slate-500">since start</span>
+            </div>
+            <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <div class="flex items-baseline gap-2">
+                  <div id="m-buy-count" class="text-2xl font-bold text-emerald-400">0</div>
+                  <div class="text-xs font-medium uppercase tracking-wide text-slate-500">BUY</div>
+                </div>
+                <div id="m-buy-vol" class="mt-0.5 text-xs text-slate-400">0 SOL in</div>
+              </div>
+              <div>
+                <div class="flex items-baseline gap-2">
+                  <div id="m-sell-count" class="text-2xl font-bold text-blue-400">0</div>
+                  <div class="text-xs font-medium uppercase tracking-wide text-slate-500">SELL</div>
+                </div>
+                <div id="m-sell-vol" class="mt-0.5 text-xs text-slate-400">0 SOL out</div>
+              </div>
+              <div>
+                <div class="flex items-baseline gap-2">
+                  <div id="m-failed" class="text-2xl font-bold text-rose-400">0</div>
+                  <div class="text-xs font-medium uppercase tracking-wide text-slate-500">FAIL</div>
+                </div>
+                <div id="m-success-rate" class="mt-0.5 text-xs text-slate-400">—</div>
+              </div>
+              <div>
+                <div class="flex items-baseline gap-2">
+                  <div id="m-positions" class="text-2xl font-bold text-slate-100">0</div>
+                  <div class="text-xs font-medium uppercase tracking-wide text-slate-500">OPEN</div>
+                </div>
+                <div id="m-whales" class="mt-0.5 text-xs text-slate-400">— whales monitored</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <h3 class="mb-4 text-sm font-semibold">Latency Percentiles</h3>
+            <div class="space-y-3">
+              <div>
+                <div class="mb-1 flex items-center justify-between text-xs">
+                  <span class="font-medium text-emerald-400">BUY</span>
+                  <span id="m-buy-perc" class="font-mono text-slate-400">—</span>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <div id="m-buy-bar" class="h-full w-0 bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all"></div>
+                </div>
+              </div>
+              <div>
+                <div class="mb-1 flex items-center justify-between text-xs">
+                  <span class="font-medium text-blue-400">SELL</span>
+                  <span id="m-sell-perc" class="font-mono text-slate-400">—</span>
+                </div>
+                <div class="h-1.5 overflow-hidden rounded-full bg-slate-800">
+                  <div id="m-sell-bar" class="h-full w-0 bg-gradient-to-r from-blue-500 to-blue-400 transition-all"></div>
+                </div>
+              </div>
+              <div class="pt-2 text-[10px] leading-relaxed text-slate-500">
+                p50 / p95 ms · target BUY ≤80ms · SELL ≤150ms
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent trades preview -->
+        <div class="mt-6 glass-card">
+          <div class="mb-4 flex items-center justify-between">
+            <h3 class="text-sm font-semibold">Recent Trades</h3>
+            <button data-nav="history" class="nav-link text-xs text-emerald-400 hover:text-emerald-300">view all →</button>
+          </div>
+          <div id="recent-trades" class="space-y-2 text-sm"></div>
+        </div>
+      </section>
+
+      <!-- POSITIONS -->
+      <section data-panel="positions" class="panel hidden">
+        <div class="glass-card">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold">Active Positions</h3>
+              <p class="mt-0.5 text-xs text-slate-500">first-whale-wins position lock · TTL auto-sell per cycle</p>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-slate-800/70 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th class="px-3 py-3">Token</th>
+                  <th class="px-3 py-3">Owner</th>
+                  <th class="px-3 py-3">Buys</th>
+                  <th class="px-3 py-3">Age</th>
+                  <th class="px-3 py-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody id="tbl-positions" class="divide-y divide-slate-800/40"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- WHALES -->
+      <section data-panel="whales" class="panel hidden">
+        <div class="grid gap-4 lg:grid-cols-3">
+          <div class="glass-card lg:col-span-1">
+            <h3 class="mb-1 text-sm font-semibold">Add Whale</h3>
+            <p class="mb-4 text-xs text-slate-500">Paste a Solana pubkey. Laserstream will auto-reconnect with the new filter list.</p>
+            <form id="form-add-whale" class="space-y-3">
+              <textarea
+                id="inp-whale"
+                rows="3"
+                placeholder="whale pubkey (base58)"
+                class="input-field font-mono text-xs"
+              ></textarea>
+              <button class="btn-primary w-full">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Add whale
+              </button>
+            </form>
+          </div>
+          <div class="glass-card lg:col-span-2">
+            <div class="mb-4 flex items-center justify-between">
+              <h3 class="text-sm font-semibold">Monitored Whales</h3>
+              <span id="whale-total" class="text-xs text-slate-500">—</span>
+            </div>
+            <ul id="list-whales" class="divide-y divide-slate-800/40"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section data-panel="settings" class="panel hidden">
+        <div class="grid gap-4 lg:grid-cols-3">
+          <div class="lg:col-span-2">
+            <div class="glass-card">
+              <div class="mb-4">
+                <h3 class="text-sm font-semibold">Runtime Settings</h3>
+                <p class="mt-0.5 text-xs text-slate-500">
+                  Changes apply on the next whale event — no restart needed.
+                  Overrides persist across restarts via <code class="rounded bg-slate-800 px-1 py-0.5 text-[10px]">state/settings.json</code>.
+                </p>
+              </div>
+              <form id="form-settings" class="grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                  <span class="field-label">Slippage tolerance (bps)</span>
+                  <input name="slippageBps" type="number" min="0" max="10000" class="input-field" />
+                  <span class="field-hint">100 bps = 1%</span>
+                </label>
+                <label class="block">
+                  <span class="field-label">Fixed BUY size (SOL)</span>
+                  <input name="fixedBuyAmountSol" type="number" step="0.01" min="0" class="input-field" />
+                  <span class="field-hint">each BUY leg</span>
+                </label>
+                <label class="block">
+                  <span class="field-label">Min whale BUY (SOL)</span>
+                  <input name="minWhaleBuyAmountSol" type="number" step="0.01" min="0" class="input-field" />
+                  <span class="field-hint">filter small whale trades</span>
+                </label>
+                <label class="block">
+                  <span class="field-label">Rebuy max count</span>
+                  <input name="rebuyMaxCount" type="number" min="1" class="input-field" />
+                  <span class="field-hint">per token cycle</span>
+                </label>
+                <label class="block">
+                  <span class="field-label">Rebuy amount step (SOL)</span>
+                  <input name="rebuyAmountSize" type="number" step="0.01" min="0" class="input-field" />
+                  <span class="field-hint">0 = flat · 0.05 = +0.05 SOL tiap rebuy</span>
+                </label>
+                <label class="block sm:col-span-2">
+                  <span class="field-label">Auto-sell TTL (minutes)</span>
+                  <input name="autoSellTtlMin" type="number" min="0" step="1" class="input-field" />
+                  <span class="field-hint">0 = hold indefinitely</span>
+                </label>
+
+                <label class="toggle-field">
+                  <div>
+                    <div class="text-sm font-medium">Rebuy enabled</div>
+                    <div class="text-xs text-slate-500">allow re-entry on same token</div>
+                  </div>
+                  <input name="rebuyEnabled" type="checkbox" class="switch" />
+                </label>
+                <label class="toggle-field">
+                  <div>
+                    <div class="text-sm font-medium">Follow whale SELL</div>
+                    <div class="text-xs text-slate-500">proportional sell to whale fraction</div>
+                  </div>
+                  <input name="followWhaleSell" type="checkbox" class="switch" />
+                </label>
+
+                <div class="col-span-full flex items-center justify-between border-t border-slate-800/70 pt-4">
+                  <span id="settings-updated" class="text-xs text-slate-500">—</span>
+                  <button class="btn-primary">
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    Save changes
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="glass-card">
+              <h3 class="mb-3 text-sm font-semibold">Quick Tips</h3>
+              <ul class="space-y-3 text-xs text-slate-400">
+                <li class="flex gap-2">
+                  <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"></span>
+                  <span><b class="text-slate-200">Slippage too low</b> → reverts increase. Raise if pump tokens keep failing.</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400"></span>
+                  <span><b class="text-slate-200">Fixed BUY size</b> × max concurrent whales = SOL needed upfront.</span>
+                </li>
+                <li class="flex gap-2">
+                  <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400"></span>
+                  <span><b class="text-slate-200">TTL auto-sell</b> protects against whales going offline mid-position.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HISTORY -->
+      <section data-panel="history" class="panel hidden">
+        <div class="glass-card">
+          <div class="mb-4 flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-semibold">Trade History</h3>
+              <p class="mt-0.5 text-xs text-slate-500">
+                Live in-memory · auto-refresh from Helius every 2h
+              </p>
+            </div>
+            <button id="btn-refresh-history" class="btn-ghost">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.6A8 8 0 0119.7 9M20 20v-5h-.6a8 8 0 01-15.1 0"/></svg>
+              Fetch from Helius
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-slate-800/70 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th class="px-3 py-3">Time</th>
+                  <th class="px-3 py-3">Side</th>
+                  <th class="px-3 py-3">Status</th>
+                  <th class="px-3 py-3">Token</th>
+                  <th class="px-3 py-3">Whale</th>
+                  <th class="px-3 py-3 text-right">Size (SOL)</th>
+                  <th class="px-3 py-3 text-right">Pipeline</th>
+                </tr>
+              </thead>
+              <tbody id="tbl-history" class="divide-y divide-slate-800/40"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      </div>
+    </main>
+
+    <!-- Toast container -->
+    <div id="toast-container" class="fixed right-4 top-4 z-50 flex w-80 flex-col gap-2"></div>
+
+    <!-- Confirm modal -->
+    <div id="modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+      <div class="glass-card m-4 w-full max-w-md">
+        <h3 id="modal-title" class="text-base font-semibold">Confirm</h3>
+        <p id="modal-body" class="mt-2 text-sm text-slate-400"></p>
+        <div class="mt-6 flex justify-end gap-2">
+          <button id="modal-cancel" class="btn-ghost">Cancel</button>
+          <button id="modal-ok" class="btn-danger">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

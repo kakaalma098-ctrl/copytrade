@@ -1,0 +1,514 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://www.helius.dev/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Slot & Block Monitoring with Yellowstone gRPC
+
+> Monitor Solana network consensus, block production, and network state changes with real-time slot and block streaming.
+
+## Overview
+
+Slot and block monitoring provides insights into Solana's network consensus, block production timing, and network health. Track slot progression, block finalization, and network performance metrics in real-time.
+
+<Info>
+  **Prerequisites:** This guide assumes you've completed the [Yellowstone gRPC Quickstart](/grpc/quickstart) and have a working stream setup.
+</Info>
+
+## Monitoring Types
+
+<Tabs>
+  <Tab title="Slot Updates">
+    **Track network consensus progression**
+
+    Monitor slot advancement across different commitment levels:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      slots: {
+        slotSubscribe: {
+          filterByCommitment: false // Receive all commitment levels
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    **Slot data includes:**
+
+    * Slot number
+    * Parent slot
+    * Commitment status (processed, confirmed, finalized)
+    * Leader information
+
+    <Note>
+      **Best for:** Network health monitoring, slot timing analysis, consensus tracking
+    </Note>
+  </Tab>
+
+  <Tab title="Block Data">
+    **Monitor complete block information**
+
+    Stream full blocks with transactions and account updates:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      blocks: {
+        blockSubscribe: {
+          accountInclude: [], // All accounts
+          includeTransactions: true,
+          includeAccounts: true,
+          includeEntries: false
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    **Block data includes:**
+
+    * Block metadata
+    * All transactions
+    * Account updates
+    * Block timing
+
+    <Warning>
+      **High volume:** Full block streams generate significant data. Use filters to reduce volume.
+    </Warning>
+  </Tab>
+
+  <Tab title="Block Metadata">
+    **Lightweight block information**
+
+    Get block metadata without transaction details:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      blocksMeta: {
+        blockMetaSubscribe: {}
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    **Metadata includes:**
+
+    * Block hash and parent hash
+    * Slot number
+    * Block height
+    * Transaction count
+    * Block rewards
+
+    <Tip>
+      **Efficient:** Lower bandwidth alternative to full block streaming
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Practical Examples
+
+### Example 1: Network Health Monitor
+
+Track slot progression and identify network issues:
+
+```typescript theme={"system"}
+import { StreamManager } from './stream-manager'; // From quickstart guide
+
+async function monitorNetworkHealth() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleNetworkHealth
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    slots: {
+      slotSubscribe: {
+        filterByCommitment: false // Track all commitment levels
+      }
+    },
+    commitment: CommitmentLevel.PROCESSED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+let lastSlot = 0;
+let lastTimestamp = Date.now();
+const slotTimes: number[] = [];
+
+function handleNetworkHealth(data: any): void {
+  if (data.slot) {
+    const slot = data.slot;
+    const currentTime = Date.now();
+    
+    console.log(`\n📊 Slot Update:`);
+    console.log(`  Slot: ${slot.slot}`);
+    console.log(`  Parent: ${slot.parentSlot}`);
+    console.log(`  Status: ${slot.status}`);
+    
+    // Calculate slot timing
+    if (lastSlot > 0) {
+      const slotDiff = slot.slot - lastSlot;
+      const timeDiff = currentTime - lastTimestamp;
+      
+      if (slotDiff === 1) {
+        // Normal slot progression
+        const slotTime = timeDiff;
+        slotTimes.push(slotTime);
+        
+        // Keep last 100 slot times for analysis
+        if (slotTimes.length > 100) {
+          slotTimes.shift();
+        }
+        
+        const avgSlotTime = slotTimes.reduce((a, b) => a + b, 0) / slotTimes.length;
+        
+        console.log(`  Slot Time: ${slotTime}ms`);
+        console.log(`  Avg Slot Time: ${avgSlotTime.toFixed(1)}ms`);
+        
+        // Alert on slow slots
+        if (slotTime > 800) {
+          console.log(`  ⚠️  SLOW SLOT: ${slotTime}ms (normal ~400ms)`);
+        }
+      } else if (slotDiff > 1) {
+        console.log(`  ⚠️  SKIPPED ${slotDiff - 1} SLOTS`);
+      }
+    }
+    
+    lastSlot = slot.slot;
+    lastTimestamp = currentTime;
+  }
+}
+```
+
+### Example 2: Block Production Monitor
+
+Track block production and transaction volume:
+
+```typescript theme={"system"}
+async function monitorBlockProduction() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleBlockProduction
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    blocksMeta: {
+      blockMetaSubscribe: {}
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleBlockProduction(data: any): void {
+  if (data.blockMeta) {
+    const blockMeta = data.blockMeta;
+    
+    console.log(`\n🧱 Block Produced:`);
+    console.log(`  Slot: ${blockMeta.slot}`);
+    console.log(`  Block Height: ${blockMeta.blockHeight}`);
+    console.log(`  Block Hash: ${blockMeta.blockhash}`);
+    console.log(`  Parent Hash: ${blockMeta.parentBlockhash}`);
+    console.log(`  Transactions: ${blockMeta.transactionCount}`);
+    console.log(`  Block Time: ${new Date(blockMeta.blockTime * 1000).toISOString()}`);
+    
+    if (blockMeta.rewards?.length > 0) {
+      console.log(`  Rewards:`);
+      blockMeta.rewards.forEach((reward: any) => {
+        console.log(`    ${reward.pubkey}: ${reward.lamports} lamports (${reward.rewardType})`);
+      });
+    }
+    
+    // Alert on high transaction count
+    if (blockMeta.transactionCount > 3000) {
+      console.log(`  🔥 HIGH ACTIVITY: ${blockMeta.transactionCount} transactions`);
+    }
+  }
+}
+```
+
+### Example 3: Filtered Block Monitor
+
+Monitor blocks containing specific program activity:
+
+```typescript theme={"system"}
+async function monitorDEXBlocks() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleDEXBlock
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    blocks: {
+      blockSubscribe: {
+        accountInclude: [
+          "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM", // Raydium V4
+          "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"   // Jupiter
+        ],
+        includeTransactions: true,
+        includeAccounts: false,
+        includeEntries: false
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleDEXBlock(data: any): void {
+  if (data.block) {
+    const block = data.block;
+    
+    console.log(`\n🔄 DEX Activity Block:`);
+    console.log(`  Slot: ${block.slot}`);
+    console.log(`  Block Hash: ${block.blockhash}`);
+    console.log(`  Total Transactions: ${block.transactions?.length || 0}`);
+    
+    if (block.transactions) {
+      let dexTxCount = 0;
+      let totalFees = 0;
+      
+      block.transactions.forEach((tx: any) => {
+        if (tx.meta && !tx.meta.err) {
+          dexTxCount++;
+          totalFees += tx.meta.fee || 0;
+        }
+      });
+      
+      console.log(`  DEX Transactions: ${dexTxCount}`);
+      console.log(`  Total Fees: ${(totalFees / 1e9).toFixed(4)} SOL`);
+      console.log(`  Avg Fee: ${(totalFees / dexTxCount / 1e9).toFixed(6)} SOL`);
+    }
+  }
+}
+```
+
+## Data Structures
+
+Understanding slot and block data formats:
+
+<Accordion title="Slot Data Structure">
+  ```typescript theme={"system"}
+  {
+    slot: number;           // Current slot number
+    parentSlot: number;     // Parent slot number  
+    status: string;         // "processed", "confirmed", "finalized"
+  }
+  ```
+
+  **Slot progression:** Each slot represents \~400ms of network time
+
+  **Commitment levels:**
+
+  * **Processed:** Initial slot processing
+  * **Confirmed:** Supermajority confirmation
+  * **Finalized:** Irreversible finalization
+</Accordion>
+
+<Accordion title="Block Metadata Structure">
+  ```typescript theme={"system"}
+  {
+    slot: number;
+    blockHeight: number;
+    blockhash: string;
+    parentBlockhash: string;
+    blockTime: number;      // Unix timestamp
+    transactionCount: number;
+    rewards: Array<{
+      pubkey: string;
+      lamports: number;
+      rewardType: string;   // "fee", "rent", "voting", "staking"
+    }>;
+  }
+  ```
+
+  **Block time:** Estimated time when the block was produced
+
+  **Rewards:** Validator rewards for block production
+</Accordion>
+
+<Accordion title="Full Block Structure">
+  ```typescript theme={"system"}
+  {
+    slot: number;
+    parentSlot: number;
+    blockhash: string;
+    previousBlockhash: string;
+    transactions: Transaction[];  // Full transaction data
+    accounts: AccountUpdate[];    // Account state changes
+    entries: Entry[];            // Block entries (if included)
+  }
+  ```
+
+  **Size warning:** Full blocks can be several MB with all transactions and accounts
+</Accordion>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Slot Monitoring" icon="clock">
+    **Lightweight and efficient**
+
+    * Very low bandwidth usage
+    * Real-time network health insights
+    * Minimal processing overhead
+    * Good for monitoring dashboards
+  </Card>
+
+  <Card title="Block Metadata" icon="info">
+    **Balanced approach**
+
+    * Moderate bandwidth usage
+    * Block-level insights without full data
+    * Transaction counts and timing
+    * Suitable for analytics
+  </Card>
+
+  <Card title="Full Blocks" icon="database">
+    **High volume data**
+
+    * High bandwidth requirements
+    * Complete transaction data
+    * Requires robust processing
+    * Use filters to reduce volume
+  </Card>
+
+  <Card title="Filtered Blocks" icon="filter">
+    **Optimized streaming**
+
+    * Use accountInclude filters
+    * Disable unnecessary data (entries, accounts)
+    * Focus on specific programs
+    * Balance detail with performance
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+<Tabs>
+  <Tab title="Network Monitoring">
+    **Track network health and performance**
+
+    * Slot timing analysis
+    * Network congestion detection
+    * Consensus monitoring
+    * Validator performance
+
+    ```typescript theme={"system"}
+    // Monitor slot timing deviations
+    const targetSlotTime = 400; // ms
+    const tolerance = 200; // ms
+
+    if (Math.abs(slotTime - targetSlotTime) > tolerance) {
+      console.log(`Network performance issue detected`);
+    }
+    ```
+  </Tab>
+
+  <Tab title="Analytics & Metrics">
+    **Collect blockchain analytics data**
+
+    * Transaction volume tracking
+    * Fee analysis
+    * Block size metrics
+    * Activity patterns
+
+    ```typescript theme={"system"}
+    // Track daily transaction volumes
+    const dailyStats = {
+      date: new Date().toDateString(),
+      totalTransactions: 0,
+      totalFees: 0,
+      blockCount: 0
+    };
+    ```
+  </Tab>
+
+  <Tab title="Application Synchronization">
+    **Keep applications in sync with network**
+
+    * Slot-based updates
+    * Block confirmations
+    * Network state tracking
+    * Timing synchronization
+
+    ```typescript theme={"system"}
+    // Update application state on finalized slots
+    if (data.slot && data.slot.status === 'finalized') {
+      updateApplicationState(data.slot.slot);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Error Handling
+
+Common issues and solutions:
+
+<Accordion title="Missing Slots">
+  **Issue:** Gaps in slot progression
+
+  **Causes:**
+
+  * Network connectivity issues
+  * Validator downtime
+  * Client processing delays
+
+  **Solutions:**
+
+  * Track slot gaps and alert
+  * Implement catch-up logic
+  * Monitor connection health
+</Accordion>
+
+<Accordion title="High Volume">
+  **Issue:** Too much block data
+
+  **Solutions:**
+
+  * Use block metadata instead of full blocks
+  * Apply account filters to reduce data
+  * Disable unnecessary inclusions (entries, accounts)
+  * Process data asynchronously
+</Accordion>
+
+<Accordion title="Timing Issues">
+  **Issue:** Inconsistent slot timing
+
+  **Analysis:**
+
+  * Calculate moving averages
+  * Track timing deviations
+  * Monitor network health metrics
+  * Correlate with validator performance
+</Accordion>
+
+## Best Practices
+
+<Note>
+  **Production Guidelines:**
+
+  * **Start with metadata** - Use block metadata before full blocks
+  * **Apply filters** - Use accountInclude to reduce irrelevant data
+  * **Monitor timing** - Track slot progression for network health
+  * **Handle gaps** - Implement logic for missing slots/blocks
+  * **Process async** - Don't block stream processing with heavy computations
+  * **Use appropriate commitment** - Match commitment level to your needs
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Entry Monitoring" icon="code" href="/grpc/entry-monitoring">
+    Learn about low-level blockchain entry monitoring
+  </Card>
+
+  <Card title="Advanced Patterns" icon="chart-line" href="/grpc/stream-pump-amm-data">
+    Real-world example: monitoring Pump AMM data
+  </Card>
+</CardGroup>

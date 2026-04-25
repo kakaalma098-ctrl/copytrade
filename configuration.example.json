@@ -1,0 +1,12 @@
+{
+  "whaleWallets": [
+    "58fnGhQQSLQebaXysboqY8Ske487j2KminKtyoyAkFRf",
+    "2NAgdRL78DVyqXAHSWiEXxxbhzxwsCKgAuvCUyKF3gCh"
+  ],
+  "jupiterApiKeys": ["jup_your_key_1", "jup_your_key_2"],
+  "rpcUrls": [
+    "https://mainnet.helius-rpc.com/?api-key=YOUR_SECONDARY_KEY",
+    "https://solana-mainnet.rpc.extrnode.com/YOUR_EXTRNODE_ID",
+    "https://api.mainnet-beta.solana.com"
+  ]
+}

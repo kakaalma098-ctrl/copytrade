@@ -1,0 +1,11 @@
+{
+  "name": "laser-helius-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Static web dashboard for laser-helius bot control & monitoring",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {}
+}

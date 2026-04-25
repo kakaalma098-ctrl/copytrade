@@ -1,0 +1,411 @@
+> ## Documentation Index
+> Fetch the complete documentation index at: https://www.helius.dev/docs/llms.txt
+> Use this file to discover all available pages before exploring further.
+
+# Account Monitoring with Yellowstone gRPC
+
+> Monitor Solana account changes in real-time with advanced filtering options, data slicing, and practical implementation patterns.
+
+## Overview
+
+Account monitoring lets you track balance changes, data modifications, ownership transfers, and account creation/deletion events across Solana in real-time. This guide covers filtering strategies and implementation patterns for different use cases.
+
+<Info>
+  **Prerequisites:** This guide assumes you've completed the [Yellowstone gRPC Quickstart](/grpc/quickstart) and have a working stream setup.
+</Info>
+
+## Account Filtering Options
+
+<Tabs>
+  <Tab title="Specific Accounts">
+    **Monitor individual accounts by public key**
+
+    Use this when you know exactly which accounts to watch:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      accounts: {
+        accountSubscribe: {
+          account: [
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC mint
+            "So11111111111111111111111111111111111111112"   // Wrapped SOL
+          ],
+          owner: [],
+          filters: []
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Note>
+      **Best for:** Monitoring specific token mints, known wallets, or critical program accounts
+    </Note>
+  </Tab>
+
+  <Tab title="By Owner">
+    **Monitor all accounts owned by specific programs**
+
+    Track all accounts owned by a program (like all token accounts for a specific mint):
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      accounts: {
+        accountSubscribe: {
+          account: [],
+          owner: [
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA", // Token Program
+            "11111111111111111111111111111111"              // System Program
+          ],
+          filters: []
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Warning>
+      **High volume:** Owner filters can generate significant data. Use additional filters to narrow results.
+    </Warning>
+  </Tab>
+
+  <Tab title="Advanced Filters">
+    **Combine data size and memory comparison filters**
+
+    Filter accounts by data structure and content:
+
+    ```typescript theme={"system"}
+    const subscribeRequest: SubscribeRequest = {
+      accounts: {
+        accountSubscribe: {
+          account: [],
+          owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+          filters: [
+            // Only token accounts (165 bytes)
+            { dataSize: 165 },
+            // Only USDC token accounts (mint at offset 0)
+            { 
+              memcmp: { 
+                offset: 0, 
+                bytes: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" 
+              } 
+            }
+          ]
+        }
+      },
+      commitment: CommitmentLevel.CONFIRMED
+    };
+    ```
+
+    <Tip>
+      **Efficient filtering:** Combine size and content filters to minimize unnecessary data
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Data Slicing
+
+Optimize bandwidth by requesting only specific byte ranges from account data:
+
+<CodeGroup>
+  ```typescript "Token Account Balance Only" theme={"system"}
+  // Only get the balance portion of token accounts (bytes 64-72)
+  const subscribeRequest: SubscribeRequest = {
+    accounts: {
+      accountSubscribe: {
+        owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+        filters: [{ dataSize: 165 }]
+      }
+    },
+    accountsDataSlice: [
+      { offset: 64, length: 8 } // Token balance (u64)
+    ],
+    commitment: CommitmentLevel.CONFIRMED
+  };
+  ```
+
+  ```typescript "Multiple Data Ranges" theme={"system"}
+  // Get mint (0-32) and balance (64-72) from token accounts
+  const subscribeRequest: SubscribeRequest = {
+    accounts: {
+      accountSubscribe: {
+        owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+        filters: [{ dataSize: 165 }]
+      }
+    },
+    accountsDataSlice: [
+      { offset: 0, length: 32 },  // Mint public key
+      { offset: 64, length: 8 }   // Balance
+    ],
+    commitment: CommitmentLevel.CONFIRMED
+  };
+  ```
+</CodeGroup>
+
+## Practical Examples
+
+### Example 1: Monitor Large Token Holders
+
+Track USDC accounts with significant balances:
+
+```typescript theme={"system"}
+import { StreamManager } from './stream-manager'; // From quickstart guide
+
+async function monitorLargeUSDCHolders() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleLargeHolderUpdate
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    accounts: {
+      accountSubscribe: {
+        owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+        filters: [
+          { dataSize: 165 }, // Token account size
+          { 
+            memcmp: { 
+              offset: 0, 
+              bytes: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" // USDC mint
+            } 
+          }
+        ]
+      }
+    },
+    accountsDataSlice: [
+      { offset: 32, length: 32 }, // Owner
+      { offset: 64, length: 8 }   // Balance
+    ],
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleLargeHolderUpdate(data: any): void {
+  if (data.account) {
+    const account = data.account.account;
+    
+    // Parse token account data
+    if (account.data && account.data.length >= 8) {
+      const balanceBuffer = Buffer.from(account.data.slice(64, 72), 'base64');
+      const balance = balanceBuffer.readBigUInt64LE();
+      const balanceInUSDC = Number(balance) / 1e6; // USDC has 6 decimals
+      
+      // Only log accounts with > 100,000 USDC
+      if (balanceInUSDC > 100000) {
+        console.log(`🐋 Large USDC Holder Update:`);
+        console.log(`  Account: ${account.pubkey}`);
+        console.log(`  Balance: ${balanceInUSDC.toLocaleString()} USDC`);
+        console.log(`  Slot: ${data.account.slot}`);
+      }
+    }
+  }
+}
+```
+
+### Example 2: Track Program Account Changes
+
+Monitor all accounts owned by a specific program:
+
+```typescript theme={"system"}
+async function monitorProgramAccounts() {
+  const PROGRAM_ID = "YourProgramId"; // Replace with actual program ID
+  
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleProgramAccountUpdate
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    accounts: {
+      accountSubscribe: {
+        owner: [PROGRAM_ID],
+        filters: []
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleProgramAccountUpdate(data: any): void {
+  if (data.account) {
+    const account = data.account.account;
+    console.log(`📋 Program Account Update:`);
+    console.log(`  Account: ${account.pubkey}`);
+    console.log(`  Owner: ${account.owner}`);
+    console.log(`  Lamports: ${account.lamports}`);
+    console.log(`  Data Length: ${account.data?.length || 0} bytes`);
+    console.log(`  Executable: ${account.executable}`);
+    console.log(`  Rent Epoch: ${account.rentEpoch}`);
+  }
+}
+```
+
+### Example 3: New Account Creation Monitoring
+
+Track when new accounts are created:
+
+```typescript theme={"system"}
+async function monitorNewAccounts() {
+  const streamManager = new StreamManager(
+    "your-grpc-endpoint",
+    "YOUR_API_KEY",
+    handleNewAccountCreation
+  );
+
+  const subscribeRequest: SubscribeRequest = {
+    accounts: {
+      accountSubscribe: {
+        owner: ["11111111111111111111111111111111"], // System Program
+        filters: []
+      }
+    },
+    commitment: CommitmentLevel.CONFIRMED
+  };
+
+  await streamManager.connect(subscribeRequest);
+}
+
+function handleNewAccountCreation(data: any): void {
+  if (data.account && data.account.account.lamports === 0) {
+    // New account creation typically starts with 0 lamports
+    const account = data.account.account;
+    console.log(`🆕 New Account Created:`);
+    console.log(`  Account: ${account.pubkey}`);
+    console.log(`  Owner: ${account.owner}`);
+    console.log(`  Slot: ${data.account.slot}`);
+  }
+}
+```
+
+## Filter Logic Reference
+
+Understanding how filters combine:
+
+<Accordion title="Filter Combination Rules">
+  **Account-level filters (AND logic):**
+
+  * `account` AND `owner` AND `filters` must all match if specified
+
+  **Within arrays (OR logic):**
+
+  * Any account in `account` array matches
+  * Any owner in `owner` array matches
+
+  **Within filters array (AND logic):**
+
+  * All dataSize and memcmp filters must match
+
+  **Example:**
+
+  ```typescript theme={"system"}
+  {
+    account: ["A", "B"],      // Match account A OR B
+    owner: ["X", "Y"],        // AND owned by X OR Y  
+    filters: [
+      { dataSize: 100 },      // AND data size is 100
+      { memcmp: {...} }       // AND memcmp matches
+    ]
+  }
+  ```
+</Accordion>
+
+<Accordion title="Common Filter Patterns">
+  **Token accounts for specific mint:**
+
+  ```typescript theme={"system"}
+  {
+    owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+    filters: [
+      { dataSize: 165 },
+      { memcmp: { offset: 0, bytes: "MINT_ADDRESS" } }
+    ]
+  }
+  ```
+
+  **SPL token accounts with minimum balance:**
+
+  ```typescript theme={"system"}
+  {
+    owner: ["TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],
+    filters: [
+      { dataSize: 165 },
+      { memcmp: { offset: 64, bytes: "MINIMUM_BALANCE_BYTES" } }
+    ]
+  }
+  ```
+
+  **Program-derived accounts:**
+
+  ```typescript theme={"system"}
+  {
+    owner: ["YOUR_PROGRAM_ID"],
+    filters: [
+      { dataSize: 200 }, // Your account size
+      { memcmp: { offset: 8, bytes: "DISCRIMINATOR" } }
+    ]
+  }
+  ```
+</Accordion>
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Bandwidth Optimization" icon="gauge-high">
+    **Use data slicing** to request only needed bytes
+
+    **Apply strict filters** to reduce unnecessary updates
+
+    **Choose appropriate commitment** levels for your use case
+  </Card>
+
+  <Card title="Scale Management" icon="chart-area">
+    **Start with specific accounts** before using owner filters
+
+    **Monitor subscription volume** and adjust filters as needed
+
+    **Implement backpressure handling** for high-volume streams
+  </Card>
+</CardGroup>
+
+## Error Handling
+
+Common account monitoring errors and solutions:
+
+<Accordion title="Filter Too Broad">
+  **Error:** Receiving too much data or hitting rate limits
+
+  **Solution:** Add more specific filters:
+
+  * Use `dataSize` to match exact account types
+  * Add `memcmp` filters for specific data patterns
+  * Consider using `accountsDataSlice` to reduce bandwidth
+</Accordion>
+
+<Accordion title="No Updates Received">
+  **Error:** Stream connects but no account updates appear
+
+  **Solution:**
+
+  * Verify account addresses are correct
+  * Check if accounts actually change frequently
+  * Try `PROCESSED` commitment for more frequent updates
+  * Test with a known active account first
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Transaction Monitoring" icon="receipt" href="/grpc/transaction-monitoring">
+    Learn to correlate account changes with transaction data
+  </Card>
+
+  <Card title="Advanced Patterns" icon="code" href="/grpc/stream-pump-amm-data">
+    Real-world example: monitoring DeFi protocols
+  </Card>
+</CardGroup>

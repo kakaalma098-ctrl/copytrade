@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash -n D:/Bot/copytrade_grok/laser-helius/deploy.sh)",
+      "Bash(claude --version)",
+      "Bash(git clone *)",
+      "Bash(claude plugin *)",
+      "Bash(claude mcp *)",
+      "Bash(mkdir -p \"C:/Users/Administrator/.claude/skills/create-coin\")",
+      "Bash(cp /tmp/create-coin-skill.md \"C:/Users/Administrator/.claude/skills/create-coin/SKILL.md\")",
+      "Read(//c/Users/Administrator/.claude/skills/**)",
+      "Bash(claude doctor *)",
+      "mcp__helius__parseTransactions",
+      "Bash(where gh *)",
+      "Read(//c/Program Files/**)",
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute"
+    ]
+  }
+}

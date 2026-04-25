@@ -1,0 +1,8 @@
+Dalam panduan QuickNode tentang cara meningkatkan peluang transaksi Solana berhasil mendarat di blok, Jito bundle integration hanyalah salah satu dari lima tips. Empat langkah lainnya adalah:
+
+Priority fee management: gunakan priority fee untuk memberi “tip” kepada validator agar transaksi mendapat prioritas dalam kondisi jaringan padat. QuickNode menyediakan Priority Fee API yang memantau tingkat fee terbaru sehingga Anda bisa menetapkan tip pada persentil 80 (kategori “high” atau “extreme”) guna meningkatkan peluang transaksi masuk blok.
+Compute unit optimization: setiap transaksi menggunakan compute units (CU). Jika CU yang diminta terlalu besar atau terlalu kecil, transaksi bisa gagal. QuickNode menyarankan men-simulasikan transaksi dengan batas CU yang tepat agar tidak melampaui limit blok dan menghindari drop.
+Transaction setup: susun transaksi dengan benar dengan menambahkan priority fee dan batas CU, kemudian simulasikan sebelum mengirim. Langkah yang disarankan meliputi: membuat transaksi, menambah instruksi priority fee, men-simulasikan transaksi, menambah instruksi batas CU, mengambil blockhash terbaru, lalu menandatangani dan mengirim transaksi.
+Landing confirmation: setelah mengirim, pantau status signature menggunakan metode getSignatureStatuses untuk memastikan transaksi benar‑benar masuk blok. Jika setelah 150 slot (≈60 detik) transaksi belum terkonfirmasi, blockhash akan kedaluwarsa dan Anda harus mengulang pengiriman.
+
+jika memang jito bundle integration yang terbaik, tetapi kenapa whale mev atau whale arbitrage tidak menggunakan jito? artinya kita bisa melebihi atau bahkan tanpa jito bundle kita bisa mengoptimalkan transaksi kita agar bisa masuk blok tanpa harus bergantung pada layanan pihak ketiga seperti Jito. 
