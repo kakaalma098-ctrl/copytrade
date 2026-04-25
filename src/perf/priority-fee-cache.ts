@@ -6,7 +6,23 @@
  * (400-800ms) — long enough to stay cheap but short enough to react to
  * network congestion. Failures are non-fatal: on error the cache falls
  * back to the caller-supplied `fallbackMicroLamports`.
+ *
+ * Helius `priorityLevel` mapping (≈ percentile):
+ *   Min       0
+ *   Low       25th
+ *   Medium    50th
+ *   High      75-85th  ← default (lebih agresif dari `recommended`)
+ *   VeryHigh  ~95th
+ *   UnsafeMax ~99th    (boros, hanya untuk darurat)
  */
+export type PriorityLevel =
+  | "Min"
+  | "Low"
+  | "Medium"
+  | "High"
+  | "VeryHigh"
+  | "UnsafeMax";
+
 export class PriorityFeeCache {
   private cached: number | null = null;
   private lastFetchAtMs = 0;
@@ -20,9 +36,10 @@ export class PriorityFeeCache {
     private readonly accountKeys: string[],
     private readonly fallbackMicroLamports: number,
     private readonly refreshMs: number = 2_000,
-    private readonly minMicroLamports: number = 1_000,
+    private readonly minMicroLamports: number = 50_000,
     private readonly maxMicroLamports: number = 500_000,
     private readonly debug: boolean = false,
+    private readonly priorityLevel: PriorityLevel = "High",
   ) {
     // Fire initial fetch immediately so the first swap gets a non-default value.
     void this.refresh();
@@ -90,7 +107,7 @@ export class PriorityFeeCache {
         params: [
           {
             accountKeys: this.accountKeys,
-            options: { recommended: true },
+            options: { priorityLevel: this.priorityLevel },
           },
         ],
       }),

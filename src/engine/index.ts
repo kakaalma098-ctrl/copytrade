@@ -1541,9 +1541,10 @@ export const createExecutionStack = (
     ],
     100_000,
     2_000,
-    1_000,
+    50_000,
     500_000,
     config.debug.whalePipeline,
+    "High",
   );
   setDirectPumpPriorityFeeCache(priorityFeeCache);
 
